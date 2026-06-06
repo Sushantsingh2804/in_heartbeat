@@ -104,6 +104,13 @@ connects to the topic they tweeted about.
 
 If no relevant "on this day" connection exists, reply with exactly: NO_MATCH
 
+Content rules — follow without exception:
+- Only state verified historical facts, nothing speculative
+- Strictly neutral tone — no political bias
+- No commentary on religion, caste, or community
+- No personal attacks on anyone
+- If uncertain about a fact, do not include it
+
 CRITICAL: Output ONLY the tweet text or NO_MATCH. No thinking, no "let me search",
 no "based on results", no explanation. Just the reply text. Nothing else."""
         }]
