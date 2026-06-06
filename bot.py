@@ -30,38 +30,56 @@ twitter = tweepy.Client(
 # ── Prompts ───────────────────────────────────────────────────
 today = datetime.now().strftime("%A, %d %B %Y")
 
-MORNING = f"""Today is {today}. Write a single tweet (max 270 chars) summarizing
-the top 3 India morning news stories. Concise, factual, engaging. Add 2 hashtags.
-Search the web for real news from today. Plain text only, no markdown."""
+MORNING = f"""Today is {today}.
 
-AFTERNOON = f"""Today is {today}. Write a single tweet (max 270 chars) about the
-biggest Indian market or business news right now. Include Sensex/Nifty movement
-if relevant. Search the web for real data. Add 1-2 hashtags. Plain text only."""
+Search the web for today's top India news and write a single tweet (max 270 chars).
+
+Cover ONLY these topics — politics, government, national affairs, social issues, 
+weather, crime, sports. Do NOT mention stock markets, Sensex, Nifty, or business.
+Add 2 relevant hashtags.
+
+CRITICAL: Output ONLY the final tweet text. No thinking, no "let me search", 
+no "based on results", no explanation. Just the tweet. Nothing else."""
+
+AFTERNOON = f"""Today is {today}.
+
+Search the web for today's India markets and business news and write a single 
+tweet (max 270 chars).
+
+Cover ONLY these topics — Sensex, Nifty, RBI, startup funding, corporate earnings,
+economy, trade, budget. Do NOT repeat any politics or national news from the morning.
+Add 1-2 relevant hashtags.
+
+CRITICAL: Output ONLY the final tweet text. No thinking, no "let me search",
+no "based on results", no explanation. Just the tweet. Nothing else."""
 
 EVENING = f"""Today is {today}. You are writing for @HeartbeatIN_, an India news account.
 
-Create a "Did You Know? On This Day" Twitter thread (6 tweets) about something
-significant that happened on this exact date in history, with an India angle.
+Search the web for a real event that happened on today's exact date in history 
+with an India angle. Also search today's trending India topics.
 
-Thread format — number each tweet exactly as [1/6], [2/6] etc.:
+Write a "Did You Know? On This Day" Twitter thread — exactly 6 tweets numbered 
+[1/6] through [6/6]:
+
 [1/6] Hook — "Did you know? On this day X years ago..." one dramatic opening line
-[2/6] Set the scene — what was India/the world like at that time
+[2/6] Set the scene — what was India or the world like at that time
 [3/6] The event itself — what actually happened
-[4/6] Immediate impact — reactions, consequences at the time
-[5/6] The surprising angle — something most people don't know about it
-[6/6] Connect to today's trending India news. End with a question. Add 1-2 hashtags.
+[4/6] Immediate impact — reactions and consequences at the time
+[5/6] The surprising angle — something most people don't know
+[6/6] Connect to a trending India topic today. End with a question. Add 1-2 hashtags.
 
 Rules:
-- Search the web for a real historical event on today's exact date with India relevance
-- Also search today's trending India topics to make the [6/6] connection natural
 - Each tweet must be under 280 characters
 - Tell it like a story, not a Wikipedia entry
-- Make [1/6] so compelling readers MUST continue"""
+- Make [1/6] so compelling that readers must continue
+
+CRITICAL: Output ONLY the 6 numbered tweets. No thinking, no "let me search",
+no "based on results", no explanation before or after the tweets. Nothing else."""
 
 # ── Generate tweet ────────────────────────────────────────────
 def generate_tweet(prompt):
     response = claude.messages.create(
-        model="claude-sonnet-4-20250514",
+        model="claude-sonnet-4-5",
         max_tokens=1000,
         tools=[{"type": "web_search_20250305", "name": "web_search"}],
         messages=[{"role": "user", "content": prompt}]

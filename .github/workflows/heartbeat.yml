@@ -33,7 +33,7 @@ jobs:
           echo "TWITTER_ACCESS_TOKEN_SECRET=${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}" >> .env
 
       - name: Morning tweet
-        if: github.event.schedule == '30 3 * * *' || github.event_name == 'workflow_dispatch'
+        if: github.event.schedule == '30 3 * * *' 
         run: python3 bot.py morning
 
       - name: Afternoon tweet
@@ -45,5 +45,5 @@ jobs:
         run: python3 reply_bot.py
 
       - name: Evening thread
-        if: github.event.schedule == '30 13 * * *'
+        if: github.event.schedule == '30 13 * * *' || github.event_name == 'workflow_dispatch'
         run: python3 bot.py evening

@@ -84,7 +84,7 @@ def generate_reply(tweet_text, username):
     today = datetime.now().strftime("%A, %d %B %Y")
 
     response = claude.messages.create(
-        model="claude-sonnet-4-20250514",
+        model="claude-sonnet-4-5",
         max_tokens=300,
         tools=[{"type": "web_search_20250305", "name": "web_search"}],
         messages=[{
@@ -104,7 +104,8 @@ connects to the topic they tweeted about.
 
 If no relevant "on this day" connection exists, reply with exactly: NO_MATCH
 
-Reply ONLY with the tweet text or NO_MATCH. No preamble, no explanation."""
+CRITICAL: Output ONLY the tweet text or NO_MATCH. No thinking, no "let me search",
+no "based on results", no explanation. Just the reply text. Nothing else."""
         }]
     )
 
