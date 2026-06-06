@@ -1,0 +1,6 @@
+.env
+*.log
+replied_ids.json
+reply_counter.json
+__pycache__/
+*.pyc

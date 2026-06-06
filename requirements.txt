@@ -1,0 +1,4 @@
+anthropic
+tweepy
+python-dotenv
+schedule
