@@ -211,20 +211,25 @@ def main():
         if posted_today >= DAILY_REPLY_LIMIT:
             print(f"\n✅ Daily limit hit. Done for today.")
             break
-
+        
         print(f"\n  Checking @{username}...")
         tweet = get_latest_tweet(username)
         if not tweet:
+            print(f"  ↳ No tweet fetched, skipping.")    # ← add this
             continue
 
         if str(tweet.id) in replied_ids:
             print(f"  ↳ Already replied, skipping.")
             continue
 
+        print(f"  📌 Tweet: {tweet.text[:80]}...")        # ← add this
+        print(f"  🔍 Generating reply...")                # ← add this
+
         try:
             reply = generate_reply(tweet.text, username)
         except Exception as e:
             logging.error(f"Claude error for @{username}: {e}")
+            print(f"  ❌ Claude error: {e}")              # ← add this
             continue
 
         if reply == "NO_MATCH":
