@@ -2,6 +2,7 @@ import anthropic
 import tweepy
 import os
 import json
+import re
 import time
 import random
 import logging
@@ -29,11 +30,20 @@ twitter = tweepy.Client(
 )
 
 # ── Config ────────────────────────────────────────────────────
-DAILY_REPLY_LIMIT   = 3          # max replies per day
-MIN_DELAY_SECS      = 300        # 5 min minimum between replies
-MAX_DELAY_SECS      = 900        # 15 min maximum between replies
-COUNTER_FILE        = "reply_counter.json"
-REPLIED_IDS_FILE    = "replied_ids.json"
+DAILY_REPLY_LIMIT = 3
+MIN_DELAY_SECS    = 300
+MAX_DELAY_SECS    = 900
+COUNTER_FILE      = "reply_counter.json"
+REPLIED_IDS_FILE  = "replied_ids.json"
+
+# ── Guidelines (same as bot.py) ───────────────────────────────
+GUIDELINES = """CONTENT RULES — non-negotiable:
+- Report only verified historical facts. No rumours or speculation
+- Strictly neutral tone — no political bias left, right, or centre
+- No commentary on religion, caste, community, or ethnicity
+- No personal attacks or negative language about individuals
+- Avoid emotionally charged or sensational language
+- If uncertain about a fact, do not include it"""
 
 # ── Target accounts ───────────────────────────────────────────
 TARGET_ACCOUNTS = [
@@ -64,7 +74,7 @@ def increment_count():
         json.dump({"date": str(date.today()), "count": count}, f)
     return count
 
-# ── Replied ID tracking (avoid replying to same tweet twice) ──
+# ── Replied ID tracking ───────────────────────────────────────
 def get_replied_ids():
     try:
         with open(REPLIED_IDS_FILE, "r") as f:
@@ -75,50 +85,91 @@ def get_replied_ids():
 def save_replied_id(tweet_id):
     ids = list(get_replied_ids())
     ids.append(str(tweet_id))
-    ids = ids[-500:]          # keep last 500 only
+    ids = ids[-500:]
     with open(REPLIED_IDS_FILE, "w") as f:
         json.dump(ids, f)
 
-# ── Generate reply ────────────────────────────────────────────
+# ── Generate reply (two-step + XML extraction) ────────────────
 def generate_reply(tweet_text, username):
     today = datetime.now().strftime("%A, %d %B %Y")
 
-    response = claude.messages.create(
+    # Step 1 — research only, find historical fact for today's date
+    research = claude.messages.create(
         model="claude-sonnet-4-5",
-        max_tokens=300,
+        max_tokens=800,
         tools=[{"type": "web_search_20250305", "name": "web_search"}],
         messages=[{
             "role": "user",
             "content": f"""Today is {today}.
 
-@{username} just tweeted: "{tweet_text}"
+@{username} tweeted: "{tweet_text}"
 
-Write a reply tweet (under 240 chars) for @HeartbeatIN_ that:
-1. Starts with a relevant "Did you know that on this day [X years ago]..." historical fact
-2. Connects naturally and specifically to what they tweeted about
-3. Adds genuine value — a real fact, stat, or surprising angle
-4. Feels like a smart human adding context, not a bot
+Search for a real historical event that happened on today's exact date
+that connects to the topic of this tweet.
 
-Search for a real historical event on today's exact date that genuinely 
-connects to the topic they tweeted about.
+Return ONLY bullet points with:
+- The historical event (what happened, when, key facts)
+- How it connects to the tweet topic
+- Any relevant numbers or statistics
 
-If no relevant "on this day" connection exists, reply with exactly: NO_MATCH
-
-Content rules — follow without exception:
-- Only state verified historical facts, nothing speculative
-- Strictly neutral tone — no political bias
-- No commentary on religion, caste, or community
-- No personal attacks on anyone
-- If uncertain about a fact, do not include it
-
-CRITICAL: Output ONLY the tweet text or NO_MATCH. No thinking, no "let me search",
-no "based on results", no explanation. Just the reply text. Nothing else."""
+If no relevant historical event exists for today's date, return exactly: NO_MATCH
+No reply tweet. No commentary. Just the facts or NO_MATCH."""
         }]
     )
 
-    return "".join(
-        b.text for b in response.content if b.type == "text"
+    facts = "".join(
+        b.text for b in research.content if b.type == "text"
     ).strip()
+
+    # If no match found in research, exit early
+    if "NO_MATCH" in facts or len(facts) < 20:
+        return "NO_MATCH"
+
+    # Step 2 — write reply from facts, NO tools, XML tags for clean extraction
+    reply_response = claude.messages.create(
+        model="claude-sonnet-4-5",
+        max_tokens=300,
+        system=f"""You are a reply writer for @HeartbeatIN_, an India news account.
+
+{GUIDELINES}
+
+OUTPUT FORMAT — you MUST wrap your reply in <reply> tags:
+<reply>
+Your reply tweet text goes here
+</reply>
+
+Write ONLY inside the tags. Nothing outside the tags.
+If the facts don't support a strong reply, write NO_MATCH inside the tags.""",
+        messages=[{
+            "role": "user",
+            "content": f"""Here are the researched historical facts:
+
+{facts}
+
+Using these facts, write a reply tweet (under 240 chars) that:
+1. Starts with "Did you know that on this day [X years ago]..."
+2. Connects naturally to what @{username} tweeted: "{tweet_text}"
+3. Adds genuine value — real fact, stat, or surprising angle
+4. Feels like a smart human adding context, not a bot
+
+Wrap your reply in <reply></reply> tags."""
+        }]
+    )
+
+    raw = "".join(
+        b.text for b in reply_response.content if b.type == "text"
+    ).strip()
+
+    # Extract reply from XML tags
+    match = re.search(r'<reply>(.*?)</reply>', raw, re.DOTALL)
+    if match:
+        result = match.group(1).strip()
+        if not result or len(result) < 20 or "NO_MATCH" in result:
+            return "NO_MATCH"
+        return result
+
+    logging.warning(f"No <reply> tags found for @{username}")
+    return "NO_MATCH"
 
 # ── Get latest tweet from account ────────────────────────────
 def get_latest_tweet(username):
@@ -144,26 +195,27 @@ def post_reply(reply_text, tweet_id, username):
         in_reply_to_tweet_id=tweet_id
     )
     save_replied_id(tweet_id)
-    tweet_id_posted = result.data["id"]
-    logging.info(f"Reply posted to @{username} tweet {tweet_id} — reply ID {tweet_id_posted}")
+    logging.info(
+        f"Reply posted to @{username} tweet {tweet_id} "
+        f"— reply ID {result.data['id']}"
+    )
     print(f"  ✅ Reply posted to @{username}!")
-    return tweet_id_posted
+    return result.data["id"]
 
 # ── Main ──────────────────────────────────────────────────────
 def main():
     print(f"\n🤖 reply_bot starting [{datetime.now().strftime('%A %d %B %Y · %H:%M')}]")
     logging.info("reply_bot session started")
 
-    # Check daily limit
     count = get_today_count()
     if count >= DAILY_REPLY_LIMIT:
         print(f"✋ Daily limit reached ({count}/{DAILY_REPLY_LIMIT}). Exiting.")
-        logging.info(f"Daily limit already reached ({count}/{DAILY_REPLY_LIMIT}), exiting")
+        logging.info(f"Daily limit reached ({count}/{DAILY_REPLY_LIMIT}), exiting")
         return
 
     replied_ids  = get_replied_ids()
     accounts     = TARGET_ACCOUNTS.copy()
-    random.shuffle(accounts)   # different order every run = more natural
+    random.shuffle(accounts)
     posted_today = count
 
     for username in accounts:
@@ -177,19 +229,18 @@ def main():
         if not tweet:
             continue
 
-        # Skip if already replied to this tweet
         if str(tweet.id) in replied_ids:
             print(f"  ↳ Already replied to this tweet, skipping.")
             continue
 
-        # Generate reply
+        print(f"  🔍 Researching historical connection...")
         try:
             reply = generate_reply(tweet.text, username)
         except Exception as e:
             logging.error(f"Claude error for @{username}: {e}")
             continue
 
-        if reply == "NO_MATCH" or not reply or len(reply) < 20:
+        if reply == "NO_MATCH":
             print(f"  ↳ No relevant 'On This Day' match found, skipping.")
             logging.info(f"No match for @{username} tweet {tweet.id}")
             continue
@@ -201,7 +252,6 @@ def main():
         print(f"\n  📌 @{username}: {tweet.text[:80]}...")
         print(f"  💬 Reply ({len(reply)} chars): {reply}")
 
-        # Post reply
         try:
             post_reply(reply, tweet.id, username)
             posted_today = increment_count()
@@ -211,15 +261,16 @@ def main():
             print(f"  ❌ Post failed: {e}")
             continue
 
-        # Random delay between replies — looks natural, avoids spam flags
         if posted_today < DAILY_REPLY_LIMIT:
             delay = random.randint(MIN_DELAY_SECS, MAX_DELAY_SECS)
-            mins  = delay // 60
-            print(f"\n  ⏳ Waiting {mins} min before next reply...")
+            print(f"\n  ⏳ Waiting {delay // 60} min before next reply...")
             logging.info(f"Sleeping {delay}s before next reply")
             time.sleep(delay)
 
-    print(f"\n🏁 Session complete. Replies posted today: {posted_today}/{DAILY_REPLY_LIMIT}")
+    print(
+        f"\n🏁 Session complete. "
+        f"Replies posted today: {posted_today}/{DAILY_REPLY_LIMIT}"
+    )
     logging.info(f"Session complete. Posted {posted_today}/{DAILY_REPLY_LIMIT}")
 
 if __name__ == "__main__":
