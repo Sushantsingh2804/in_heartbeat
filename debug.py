@@ -6,11 +6,29 @@ import sys
 from datetime import datetime
 from dotenv import load_dotenv
 
-load_dotenv()
+# ── Load env ──────────────────────────────────────────────────
+result = load_dotenv()
 
-claude = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+# ── Env check ─────────────────────────────────────────────────
+bearer    = os.getenv("TWITTER_BEARER_TOKEN")
+client_id = os.getenv("TWITTER_CLIENT_ID")
+anth_key  = os.getenv("ANTHROPIC_API_KEY")
+
+print(f"\n🔑 ENV CHECK:")
+print(f"  .env loaded          : {'✅' if result else '❌ file not found'}")
+print(f"  ANTHROPIC_API_KEY    : {'✅ loaded' if anth_key else '❌ missing'} ({len(anth_key) if anth_key else 0} chars)")
+print(f"  TWITTER_CLIENT_ID    : {'✅ loaded' if client_id else '❌ missing'}")
+print(f"  TWITTER_BEARER_TOKEN : {'✅ loaded' if bearer else '❌ missing'} ({len(bearer) if bearer else 0} chars)")
+
+if not bearer:
+    print("\n❌ Bearer token missing — cannot read tweets. Check your .env file.")
+    sys.exit(1)
+
+# ── Clients ───────────────────────────────────────────────────
+claude = anthropic.Anthropic(api_key=anth_key)
 
 twitter = tweepy.Client(
+    bearer_token=bearer,
     consumer_key=os.getenv("TWITTER_CLIENT_ID"),
     consumer_secret=os.getenv("TWITTER_CLIENT_SECRET"),
     access_token=os.getenv("TWITTER_ACCESS_TOKEN"),
@@ -20,26 +38,27 @@ twitter = tweepy.Client(
 today = datetime.now().strftime("%A, %d %B %Y")
 
 SYSTEM = """You are a reply writer for @HeartbeatIN_, an India news account.
-Search for a real historical event on today's exact date connected to the tweet topic.
-Then write a short reply using that fact.
+Search the web for a relevant fact, stat, or insight about the tweet topic.
+Then write a short reply that adds genuine value.
 
 Content rules:
-- Verified historical facts only. Nothing speculative
+- Verified facts and stats only. Nothing speculative
 - Neutral tone — no political bias, no religion or caste commentary
 - No personal attacks or sensational language
+- Do NOT repeat any information already mentioned in the tweet
+- Add something NEW — a stat, trend, context, or angle not in the original tweet
 
 Output rule — ALWAYS wrap your reply in XML tags:
 <reply>
 your reply here
 </reply>
 
-If no relevant historical event exists for today's date write:
+If you cannot find a relevant fact that adds new value, write:
 <reply>NO_MATCH</reply>
 
 Write ONLY inside the tags. Nothing outside."""
 
 # ── Account to test against ───────────────────────────────────
-# Change this to test against different accounts
 TEST_ACCOUNT = sys.argv[1] if len(sys.argv) > 1 else "NSEIndia"
 
 # ── Get latest tweet ──────────────────────────────────────────
@@ -65,7 +84,6 @@ print(f"DEBUG MODE — REPLY BOT — {today}")
 print(f"Testing against: @{TEST_ACCOUNT}")
 print(f"{'='*60}")
 
-# Fetch latest tweet
 print(f"\n🔍 Fetching latest tweet from @{TEST_ACCOUNT}...")
 tweet = get_latest_tweet(TEST_ACCOUNT)
 
@@ -81,14 +99,22 @@ print(f"{'='*60}")
 prompt = f"""Today is {today}.
 @{TEST_ACCOUNT} tweeted: "{tweet.text}"
 
-Search for a real historical event on today's exact date connected to this tweet.
-Write a reply under 240 chars starting with "Did you know that on this day [X years ago]..."
-Wrap in <reply> tags."""
+Step 1 — identify the main topic of this tweet.
+Step 2 — search for a current, relevant fact or stat about that SAME topic.
+Step 3 — write a reply under 240 chars that adds new insight.
+
+Rules:
+- Must be about the exact same topic as the tweet
+- Must NOT repeat anything already said in the tweet
+- Must add a new fact, stat, or angle the tweet didn't mention
+- If no genuinely new insight found, output NO_MATCH
+
+Wrap reply in <reply> tags."""
 
 print(f"\n📤 PROMPT SENT:\n{prompt}\n")
 print(f"{'='*60}")
 
-# Call API
+# Call Claude API
 response = claude.messages.create(
     model="claude-sonnet-4-5",
     max_tokens=400,
