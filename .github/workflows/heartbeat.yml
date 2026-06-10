@@ -2,11 +2,21 @@ name: HeartbeatIN Bot
 
 on:
   schedule:
-    - cron: "30 3 * * *"    # 9:00 AM IST  — morning tweet
-    - cron: "30 7 * * *"    # 1:00 PM IST  — afternoon tweet
-    - cron: "0 13 * * *"    # 6:30 PM IST  — reply bot
-    - cron: "30 13 * * *"   # 7:00 PM IST  — evening thread
-  workflow_dispatch:          # lets you trigger manually from GitHub UI
+    - cron: "30 9 * * *"    # 9:30 AM IST  — morning tweet
+    - cron: "0 13 * * *"    # 1:00 PM IST  — afternoon tweet
+    - cron: "0 19 * * *"    # 7:00 PM IST  — evening thread
+  timezone: "Asia/Kolkata"
+  workflow_dispatch:
+    inputs:
+      slot:
+        description: 'Which slot to run'
+        required: true
+        default: 'morning'
+        type: choice
+        options:
+          - morning
+          - afternoon
+          - evening
 
 jobs:
   run-bot:
@@ -33,18 +43,24 @@ jobs:
           echo "TWITTER_ACCESS_TOKEN_SECRET=${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}" >> .env
           echo "TWITTER_BEARER_TOKEN=${{ secrets.TWITTER_BEARER_TOKEN }}" >> .env
 
-      - name: Morning tweet
-        if: github.event.schedule == '30 3 * * *' 
-        run: python3 bot.py morning
+      - name: Run scheduled slot
+        if: github.event_name == 'schedule'
+        run: |
+          HOUR=$(TZ="Asia/Kolkata" date +%H)
+          echo "IST hour: $HOUR"
+          if [ "$HOUR" = "09" ]; then
+            echo "▶ Running morning tweet"
+            python3 bot.py morning
+          elif [ "$HOUR" = "13" ]; then
+            echo "▶ Running afternoon tweet"
+            python3 bot.py afternoon
+          elif [ "$HOUR" = "19" ]; then
+            echo "▶ Running evening thread"
+            python3 bot.py evening
+          else
+            echo "⚠️ Unexpected hour $HOUR — skipping"
+          fi
 
-      - name: Afternoon tweet
-        if: github.event.schedule == '30 7 * * *'
-        run: python3 bot.py afternoon
-
-      # - name: Reply bot
-      #   if: github.event.schedule == '0 13 * * *'
-      #   run: python3 reply_bot.py
-
-      - name: Evening thread
-        if: github.event.schedule == '30 13 * * *' || github.event_name == 'workflow_dispatch'
-        run: python3 bot.py evening
+      - name: Run manual slot
+        if: github.event_name == 'workflow_dispatch'
+        run: python3 bot.py ${{ inputs.slot }}
