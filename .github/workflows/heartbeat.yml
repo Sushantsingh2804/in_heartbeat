@@ -2,10 +2,9 @@ name: HeartbeatIN Bot
 
 on:
   schedule:
-    - cron: "30 9 * * *"    # 9:30 AM IST  — morning tweet
-    - cron: "0 13 * * *"    # 1:00 PM IST  — afternoon tweet
-    - cron: "0 19 * * *"    # 7:00 PM IST  — evening thread
-  timezone: "Asia/Kolkata"
+    - cron: "0 4 * * *"     # 9:30 AM IST
+    - cron: "30 7 * * *"    # 1:00 PM IST
+    - cron: "30 13 * * *"   # 7:00 PM IST
   workflow_dispatch:
     inputs:
       slot:
@@ -19,22 +18,17 @@ on:
           - evening
 
 jobs:
-  run-bot:
+
+  morning:
     runs-on: ubuntu-latest
-
+    if: github.event.schedule == '0 4 * * *' || (github.event_name == 'workflow_dispatch' && inputs.slot == 'morning')
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      - name: Install dependencies
-        run: pip install anthropic tweepy python-dotenv
-
-      - name: Create .env file
+      - run: pip install anthropic tweepy python-dotenv
+      - name: Create .env
         run: |
           echo "ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}" >> .env
           echo "TWITTER_CLIENT_ID=${{ secrets.TWITTER_CLIENT_ID }}" >> .env
@@ -42,25 +36,42 @@ jobs:
           echo "TWITTER_ACCESS_TOKEN=${{ secrets.TWITTER_ACCESS_TOKEN }}" >> .env
           echo "TWITTER_ACCESS_TOKEN_SECRET=${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}" >> .env
           echo "TWITTER_BEARER_TOKEN=${{ secrets.TWITTER_BEARER_TOKEN }}" >> .env
+      - run: python3 bot.py morning
 
-      - name: Run scheduled slot
-        if: github.event_name == 'schedule'
+  afternoon:
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '30 7 * * *' || (github.event_name == 'workflow_dispatch' && inputs.slot == 'afternoon')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install anthropic tweepy python-dotenv
+      - name: Create .env
         run: |
-          HOUR=$(TZ="Asia/Kolkata" date +%H)
-          echo "IST hour: $HOUR"
-          if [ "$HOUR" = "09" ]; then
-            echo "▶ Running morning tweet"
-            python3 bot.py morning
-          elif [ "$HOUR" = "13" ]; then
-            echo "▶ Running afternoon tweet"
-            python3 bot.py afternoon
-          elif [ "$HOUR" = "19" ]; then
-            echo "▶ Running evening thread"
-            python3 bot.py evening
-          else
-            echo "⚠️ Unexpected hour $HOUR — skipping"
-          fi
+          echo "ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}" >> .env
+          echo "TWITTER_CLIENT_ID=${{ secrets.TWITTER_CLIENT_ID }}" >> .env
+          echo "TWITTER_CLIENT_SECRET=${{ secrets.TWITTER_CLIENT_SECRET }}" >> .env
+          echo "TWITTER_ACCESS_TOKEN=${{ secrets.TWITTER_ACCESS_TOKEN }}" >> .env
+          echo "TWITTER_ACCESS_TOKEN_SECRET=${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}" >> .env
+          echo "TWITTER_BEARER_TOKEN=${{ secrets.TWITTER_BEARER_TOKEN }}" >> .env
+      - run: python3 bot.py afternoon
 
-      - name: Run manual slot
-        if: github.event_name == 'workflow_dispatch'
-        run: python3 bot.py ${{ inputs.slot }}
+  evening:
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '30 13 * * *' || (github.event_name == 'workflow_dispatch' && inputs.slot == 'evening')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install anthropic tweepy python-dotenv
+      - name: Create .env
+        run: |
+          echo "ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}" >> .env
+          echo "TWITTER_CLIENT_ID=${{ secrets.TWITTER_CLIENT_ID }}" >> .env
+          echo "TWITTER_CLIENT_SECRET=${{ secrets.TWITTER_CLIENT_SECRET }}" >> .env
+          echo "TWITTER_ACCESS_TOKEN=${{ secrets.TWITTER_ACCESS_TOKEN }}" >> .env
+          echo "TWITTER_ACCESS_TOKEN_SECRET=${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}" >> .env
+          echo "TWITTER_BEARER_TOKEN=${{ secrets.TWITTER_BEARER_TOKEN }}" >> .env
+      - run: python3 bot.py evening
