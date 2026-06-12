@@ -1,10 +1,6 @@
 name: HeartbeatIN Bot
 
 on:
-  schedule:
-    - cron: "0 4 * * *"     # 9:30 AM IST
-    - cron: "30 7 * * *"    # 1:00 PM IST
-    - cron: "30 13 * * *"   # 7:00 PM IST
   workflow_dispatch:
     inputs:
       slot:
@@ -21,7 +17,7 @@ jobs:
 
   morning:
     runs-on: ubuntu-latest
-    if: github.event.schedule == '0 4 * * *' || (github.event_name == 'workflow_dispatch' && inputs.slot == 'morning')
+    if: inputs.slot == 'morning'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -40,7 +36,7 @@ jobs:
 
   afternoon:
     runs-on: ubuntu-latest
-    if: github.event.schedule == '30 7 * * *' || (github.event_name == 'workflow_dispatch' && inputs.slot == 'afternoon')
+    if: inputs.slot == 'afternoon'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -59,7 +55,7 @@ jobs:
 
   evening:
     runs-on: ubuntu-latest
-    if: github.event.schedule == '30 13 * * *' || (github.event_name == 'workflow_dispatch' && inputs.slot == 'evening')
+    if: inputs.slot == 'evening'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
